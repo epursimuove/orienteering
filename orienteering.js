@@ -8,7 +8,7 @@ const orienteering = (() => {
 
     console.log('Initializing orienteering functionality...');
 
-    const version = '1.0.0';
+    const version = '1.1.0';
     const MISSING_TIME = -1;
     const NO_PLACE = -1;
 
@@ -85,7 +85,8 @@ const orienteering = (() => {
 
     const createEmptyControl = (n = 999) => {
         return {
-            control: n === 999 ? 'Finish' : 'Control ' + n,
+            // control: n === 999 ? 'Finish' : 'Control ' + n,
+            control: n === 999 ? 'Finish' : n,
             leg: createPerformanceContainer(),
             split: createPerformanceContainer()
         };
