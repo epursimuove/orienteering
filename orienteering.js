@@ -420,7 +420,7 @@ const orienteering = (() => {
                     const relativeSplitTimeMinimized =
                         control.split.relativeTimeInSeconds > 0 ?
                             '+' + formatTime(control.split.relativeTimeInSeconds) :
-                            control.split.relativeTimesInSeconds === 0 ?
+                            control.split.relativeTimeInSeconds === 0 ?
                                 relativeSplitTimeInSecondsSortedAscending > 0 ?
                                     '-' + formatTime(relativeSplitTimeInSecondsSortedAscending) :
                                     0 :
