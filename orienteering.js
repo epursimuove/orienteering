@@ -8,7 +8,7 @@ const orienteering = (() => {
 
     console.log('Initializing orienteering functionality...');
 
-    const version = '1.1.0';
+    const version = '1.1.1';
     const MISSING_TIME = -1;
     const NO_PLACE = -1;
 
@@ -409,18 +409,22 @@ const orienteering = (() => {
                     const relativeLegTimeMinimized =
                         control.leg.relativeTimeInSeconds > 0 ?
                             '+' + formatTime(control.leg.relativeTimeInSeconds) :
-                            relativeLegTimeInSecondsSortedAscending > 0 ?
-                                '-' + formatTime(relativeLegTimeInSecondsSortedAscending) :
-                                0;
+                            control.leg.relativeTimeInSeconds === 0 ?
+                                relativeLegTimeInSecondsSortedAscending > 0 ?
+                                    '-' + formatTime(relativeLegTimeInSecondsSortedAscending) :
+                                    0 :
+                                null;
                     athlete.leg.relativeTimesMinimized.push(relativeLegTimeMinimized);
                     control.leg.relativeTimeMinimized = relativeLegTimeMinimized;
 
                     const relativeSplitTimeMinimized =
                         control.split.relativeTimeInSeconds > 0 ?
                             '+' + formatTime(control.split.relativeTimeInSeconds) :
-                            relativeSplitTimeInSecondsSortedAscending > 0 ?
-                                '-' + formatTime(relativeSplitTimeInSecondsSortedAscending) :
-                                0;
+                            control.split.relativeTimesInSeconds === 0 ?
+                                relativeSplitTimeInSecondsSortedAscending > 0 ?
+                                    '-' + formatTime(relativeSplitTimeInSecondsSortedAscending) :
+                                    0 :
+                                null;
                     athlete.split.relativeTimesMinimized.push(relativeSplitTimeMinimized);
                     control.split.relativeTimeMinimized = relativeSplitTimeMinimized;
                 });
@@ -522,7 +526,9 @@ const orienteering = (() => {
                             orienteeringData.best.split.timesInSeconds[index] +
                             relativeSplitTimeInSeconds;
 
-                        const splitTimeStringForAthlete = formatTime(splitTimeInSecondsForAthlete, 'hours', true);
+                        const splitTimeStringForAthlete = relativeSplitTimeInSeconds >= 0 ?
+                            formatTime(splitTimeInSecondsForAthlete, 'hours', true) :
+                            null;
 
                         return {
                             t: splitTimeStringForAthlete,
