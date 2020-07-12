@@ -8,7 +8,7 @@ const orienteering = (() => {
 
     console.log('Initializing orienteering functionality...');
 
-    const version = '1.1.1';
+    const version = '1.2.0';
     const MISSING_TIME = -1;
     const NO_PLACE = -1;
 
@@ -367,11 +367,23 @@ const orienteering = (() => {
         const aggregated = orienteeringData.aggregated;
         const results = orienteeringData.results;
 
-        {
-            const compareNumbers = (a, b) => {
-                return a - b;
-            };
+        const compareNumbers = (a, b) => {
+            return a - b;
+        };
 
+        const roundToOneDecimal = x => Math.round( x * 10) / 10;
+
+        const sum = array => array.reduce((a, b) => a + b, 0);
+
+        const average = array => sum(array) / array.length;
+
+        const median = array => array.length % 2 === 0 ?
+            (array[array.length / 2 - 1] + array[array.length / 2]) / 2 :
+            array[Math.ceil(array.length / 2) - 1];
+
+        const copyAndSort = array => array.slice().sort(compareNumbers);
+
+        {
             const isPositive = n => n >= 0;
 
             for (let i = 0; i < orienteeringData.numberOfControls + 1; i++) {
@@ -545,6 +557,16 @@ const orienteering = (() => {
                         return calculateMistakeInPercentage(orienteeringData.best.leg.timesInSeconds)(relativeLegTimeInSeconds, index);
                     });
             }
+
+            {
+                // Calculate average and median for mistakes.
+
+                const timesPercentagesSortedAscending = copyAndSort(athlete.leg.timesPercentages);
+
+                athlete.leg.averagePercentageLoss = roundToOneDecimal(average(timesPercentagesSortedAscending));
+
+                athlete.leg.medianPercentageLoss = median(timesPercentagesSortedAscending);
+            }
         });
 
         aggregated.place.legFirstPlaces = results
@@ -598,6 +620,14 @@ const orienteering = (() => {
 
             aggregated.mistake.legAbove128Percent = results
                 .map(athlete => athlete.additionals.legAbove128Percent);
+        }
+
+        {
+            aggregated.averagePercentageLoss = results
+                .map(athlete => athlete.leg.averagePercentageLoss);
+
+            aggregated.medianPercentageLoss = results
+                .map(athlete => athlete.leg.medianPercentageLoss);
         }
 
         console.log('Enhancing data so it can be used together with charts - DONE');
