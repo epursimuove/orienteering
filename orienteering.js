@@ -8,7 +8,7 @@ const orienteering = (() => {
 
     console.log('Initializing orienteering functionality...');
 
-    const version = '1.3.0';
+    const version = '1.4.0';
     const MISSING_TIME = -1;
     const NO_PLACE = -1;
 
@@ -636,6 +636,12 @@ const orienteering = (() => {
 
             aggregated.medianPercentageLoss = results
                 .map(athlete => athlete.leg.medianPercentageLoss);
+        }
+
+        {
+            const optimalTotalTimeInSeconds = sum(orienteeringData.best.leg.timesInSeconds);
+            orienteeringData.best.optimalTotalTimeInSeconds = optimalTotalTimeInSeconds;
+            orienteeringData.best.optimalTotalTime = formatTime(optimalTotalTimeInSeconds, 'minutes');
         }
 
         console.log('Enhancing data so it can be used together with charts - DONE');
