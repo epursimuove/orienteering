@@ -8,7 +8,7 @@ const orienteering = (() => {
 
     console.log('Initializing orienteering functionality...');
 
-    const version = '1.2.0';
+    const version = '1.3.0';
     const MISSING_TIME = -1;
     const NO_PLACE = -1;
 
@@ -272,7 +272,8 @@ const orienteering = (() => {
                         relativeTimes: [], // Original value read from WinSplits.
                         relativeTimesInSeconds: [],
                         relativeTimesMinimized: [], // Format: h:m:s.
-                        places: []
+                        places: [],
+                        timesPercentages: []
                     }
                 };
 
@@ -353,11 +354,12 @@ const orienteering = (() => {
         return isAbove;
     };
 
+    const roundToOneDecimal = x => Math.round( x * 10) / 10;
+
     const calculateMistakeInPercentage = (bestLegTimesInSeconds) => (relativeLegTimeInSeconds, index) => {
         const bestLegTimeInSeconds = bestLegTimesInSeconds[index];
 
-        // Mathematical expression may be rewritten :)
-        const percentage = Math.round((((bestLegTimeInSeconds + relativeLegTimeInSeconds) * 100 / bestLegTimeInSeconds) - 100) * 10) / 10;
+        const percentage = roundToOneDecimal(relativeLegTimeInSeconds * 100 / bestLegTimeInSeconds);
         return percentage;
     };
 
@@ -370,8 +372,6 @@ const orienteering = (() => {
         const compareNumbers = (a, b) => {
             return a - b;
         };
-
-        const roundToOneDecimal = x => Math.round( x * 10) / 10;
 
         const sum = array => array.reduce((a, b) => a + b, 0);
 
@@ -559,6 +559,14 @@ const orienteering = (() => {
             }
 
             {
+                athlete.split.timesPercentages = athlete.split.relativeTimesInSeconds
+                    .map((relativeSplitTimeInSeconds, index) => {
+
+                        return calculateMistakeInPercentage(orienteeringData.best.split.timesInSeconds)(relativeSplitTimeInSeconds, index);
+                    });
+            }
+
+            {
                 // Calculate average and median for mistakes.
 
                 const timesPercentagesSortedAscending = copyAndSort(athlete.leg.timesPercentages);
@@ -633,7 +641,7 @@ const orienteering = (() => {
         console.log('Enhancing data so it can be used together with charts - DONE');
     };
 
-    console.log('Initializing orienteering functionality - DONE');
+    console.log(`Initializing orienteering functionality - DONE (version ${version})`);
 
     return {
         version,
