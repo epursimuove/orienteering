@@ -8,7 +8,7 @@ const orienteering = (() => {
 
     console.log('Initializing orienteering functionality...');
 
-    const version = '1.4.0';
+    const version = '1.5.0';
     const MISSING_TIME = -1;
     const NO_PLACE = -1;
 
@@ -78,9 +78,24 @@ const orienteering = (() => {
             relativeTime: null,
             relativeTimeInSeconds: null,
             relativeTimeMinimized: null,
+            actualTime: null,
+            actualTimeInSeconds: null,
             actualTimeMinimized: null,
             place: null
         };
+    };
+
+    const createEmptyLegOrSplitWrapper = () => {
+        return {
+            relativeTimes: [], // Original value read from WinSplits. TODO Inte alltid originalvärden, kan vara actual också.
+            relativeTimesInSeconds: [],
+            relativeTimesMinimized: [], // Format: h:m:s.
+            places: [],
+            timesPercentages: [],
+            actualTimes: [],
+            actualTimesInSeconds: [],
+            actualTimesMinimized: [] // Format: h:m:s.
+        }
     };
 
     const createEmptyControl = (n = 999) => {
@@ -123,34 +138,59 @@ const orienteering = (() => {
 
     const nextPart = (parseWrapper) => parseWrapper.parts[parseWrapper.index++];
 
-    const extractTimeInformationForAthlete = (parseWrapper) => (type) => {
+    const calculateActualTimesFromRelativeTimes = (orienteeringData, athlete, control, type) => {
+        // Calculate actual times (from the defined relative times and best times).
+        const legOrSplit = control[type];
+
+        const index = control.control === 'Finish' ? orienteeringData.numberOfControls : control.control - 1;
+
+        legOrSplit.actualTimeInSeconds = orienteeringData.best[type].timesInSeconds[index] + legOrSplit.relativeTimeInSeconds;
+        // console.log(`Calculating control ${control.control}`, orienteeringData.best[type].timesInSeconds[index], legOrSplit.relativeTimeInSeconds, legOrSplit.actualTimeInSeconds);
+
+        legOrSplit.actualTime = formatTime(legOrSplit.actualTimeInSeconds);
+    };
+
+    const calculateRelativeTimesFromActualTimes = (orienteeringData, athlete, control, type) => {
+        // Calculate relative times (from the defined actual times and best times).
+        const legOrSplit = control[type];
+
+        const index = control.control === 'Finish' ? orienteeringData.numberOfControls : control.control - 1;
+
+        legOrSplit.relativeTimeInSeconds = legOrSplit.actualTimeInSeconds - orienteeringData.best[type].timesInSeconds[index];
+        // console.log(`Calculating control ${control.control}`, legOrSplit.actualTimeInSeconds, orienteeringData.best[type].timesInSeconds[index], legOrSplit.relativeTimeInSeconds);
+
+        legOrSplit.relativeTime = formatTime(legOrSplit.relativeTimeInSeconds);
+    };
+
+    const extractTimeInformationForAthlete = (parseWrapper, configuration) => (type) => {
 
         // Loop all controls plus finish.
         for (let control = 1; control <= parseWrapper.numberOfControls + 1; control++) {
             const currentControl = parseWrapper.athlete.controls[control - 1];
             const legOrSplit = currentControl[type];
-            const relativeTime = nextPart(parseWrapper);
+            const relativeOrActualTime = nextPart(parseWrapper);
             const place = getPlace(nextPart(parseWrapper));
 
-            legOrSplit.originalTime = relativeTime;
-            legOrSplit.relativeTime = relativeTime;
+            legOrSplit.originalTime = relativeOrActualTime;
             legOrSplit.place = place;
-            legOrSplit.relativeTimeInSeconds =
-                place === 1 ? 0 : toSeconds(relativeTime);
+            if (configuration.typeOfTimeDataToParse === 'RELATIVE') {
+                legOrSplit.relativeTime = relativeOrActualTime;
+                legOrSplit.relativeTimeInSeconds =
+                    place === 1 ? 0 : toSeconds(relativeOrActualTime);
+            } else {
+                legOrSplit.actualTime = relativeOrActualTime;
+                legOrSplit.actualTimeInSeconds = toSeconds(relativeOrActualTime);
+            }
 
             if (place === 1) {
-                parseWrapper.orienteeringData.best[type].timesOriginal[control - 1] = relativeTime;
-                parseWrapper.orienteeringData.best[type].times[control - 1] = formatTime(toSeconds(relativeTime), 'minutes');
-                parseWrapper.orienteeringData.best[type].timesInSeconds[control - 1] = toSeconds(relativeTime);
+                parseWrapper.orienteeringData.best[type].timesOriginal[control - 1] = relativeOrActualTime;
+                parseWrapper.orienteeringData.best[type].times[control - 1] = formatTime(toSeconds(relativeOrActualTime), 'minutes');
+                parseWrapper.orienteeringData.best[type].timesInSeconds[control - 1] = toSeconds(relativeOrActualTime);
             }
         }
-
-        parseWrapper.athlete[type].relativeTimes = parseWrapper.athlete.controls.map(control => control[type].relativeTime);
-        parseWrapper.athlete[type].relativeTimesInSeconds = parseWrapper.athlete.controls.map(control => control[type].relativeTimeInSeconds);
-        parseWrapper.athlete[type].places = parseWrapper.athlete.controls.map(control => control[type].place);
     };
 
-    const parseSplitTimesExportedAsText = rawData => {
+    const parseSplitTimesExportedAsText = (rawData, configuration) => {
 
         // Notes 2020-06-06.
         //
@@ -161,7 +201,15 @@ const orienteering = (() => {
         // Pos<tab>Name<tab>Finish time<tab>Diff<tab><Start-Controls-Finish><tab>Name<tab><newline>
         // <tab>Club<tab><tab><tab><Start-Controls-Finish><tab>Club<tab><newline>
 
-        console.log('Parsing WinSplits Online exported data...');
+        // Notes 2020-10-04.
+        //
+        // Now you can also import formats that consist of actual split times, so you don't need to export
+        // with relative times.
+
+        console.log('[Step 1] Parsing WinSplits Online exported data...');
+
+        const typeOfData = configuration.typeOfTimeDataToParse + ' times';
+        console.log(`Parsing ${typeOfData}`);
 
         const orienteeringData = {
             numberOfParticipants: 0,
@@ -261,44 +309,32 @@ const orienteering = (() => {
                     totalTime: nextPart(parseWrapper),
                     diffTotalTime: nextPart(parseWrapper),
                     controls: createEmptyControls(numberOfControls),
-                    leg: {
-                        relativeTimes: [], // Original value read from WinSplits.
-                        relativeTimesInSeconds: [],
-                        relativeTimesMinimized: [], // Format: h:m:s.
-                        places: [],
-                        timesPercentages: []
-                    },
-                    split: {
-                        relativeTimes: [], // Original value read from WinSplits.
-                        relativeTimesInSeconds: [],
-                        relativeTimesMinimized: [], // Format: h:m:s.
-                        places: [],
-                        timesPercentages: []
-                    }
+                    leg: createEmptyLegOrSplitWrapper(),
+                    split: createEmptyLegOrSplitWrapper()
                 };
 
                 parseWrapper.athlete = athlete;
 
-                extractTimeInformationForAthlete(parseWrapper)('leg');
+                extractTimeInformationForAthlete(parseWrapper, configuration)('leg');
 
             } else {
                 parseWrapper.index++;
                 athlete.club = nextPart(parseWrapper);
                 parseWrapper.index += 2;
 
-                extractTimeInformationForAthlete(parseWrapper)('split');
+                extractTimeInformationForAthlete(parseWrapper, configuration)('split');
             }
 
             {
                 // Sanity checks.
 
-                const value = nextPart(parseWrapper);
+                const nameOrClub = nextPart(parseWrapper);
 
                 const correctStructure = parseWrapper.index === parts.length - 1;
 
-                const correctHeadTailFirstRow = firstRowForAthlete && value === athlete.name;
+                const correctHeadTailFirstRow = firstRowForAthlete && nameOrClub === athlete.name;
 
-                const correctHeadTailSecondRow = !firstRowForAthlete && value === athlete.club;
+                const correctHeadTailSecondRow = !firstRowForAthlete && nameOrClub === athlete.club;
 
                 if (!(correctStructure && (correctHeadTailFirstRow || correctHeadTailSecondRow))) {
                     console.log('MISMATCH!!!!');
@@ -331,7 +367,7 @@ const orienteering = (() => {
 
 
         orienteeringData.results = athletes;
-        console.log('Parsing WinSplits Online exported data - DONE');
+        console.log('[Step 1] Parsing WinSplits Online exported data - DONE');
 
         return orienteeringData;
     };
@@ -363,8 +399,62 @@ const orienteering = (() => {
         return percentage;
     };
 
+    const interestingAthlete = athlete => false && athlete.position > 0 && athlete.position <= 2;
+
+    const calculateActualAndRelativeTimesFromParsedInformation = (orienteeringData, configuration) => {
+        console.log('[Step 2] Calculating additional time information from parsed data...');
+
+        const parsingRelativeTimes = configuration.typeOfTimeDataToParse === 'RELATIVE';
+        const typeOfData = configuration.typeOfTimeDataToParse + ' times';
+        console.log(`Parsed data contains ${typeOfData} for ${orienteeringData.results.length} athletes and ${orienteeringData.numberOfControls} controls`);
+
+        for (const athlete of orienteeringData.results) {
+            if (interestingAthlete(athlete)) {
+                console.log(`\n${athlete.position}: ${athlete.name} (${athlete.club})`);
+                console.log('athlete', athlete);
+            }
+
+            for (const control of athlete.controls) {
+                if (interestingAthlete(athlete)) {
+                    console.log('');
+                    console.log(`control ${control.control}: ${control.leg.originalTime} => ${control.split.originalTime}`);
+                }
+
+                if (parsingRelativeTimes) {
+                    calculateActualTimesFromRelativeTimes(orienteeringData, athlete, control, 'leg');
+                    calculateActualTimesFromRelativeTimes(orienteeringData, athlete, control, 'split');
+
+                    if (interestingAthlete(athlete)) {
+                        console.log(`CALCULATION DONE: control ${control.control}: ${control.leg.actualTime} => ${control.split.actualTime}`);
+                        console.log('control', control);
+                    }
+
+                } else {
+                    calculateRelativeTimesFromActualTimes(orienteeringData, athlete, control, 'leg');
+                    calculateRelativeTimesFromActualTimes(orienteeringData, athlete, control, 'split');
+
+                    if (interestingAthlete(athlete)) {
+                        console.log(`CALCULATION DONE: control ${control.control}: ${control.leg.relativeTime} => ${control.split.relativeTime}`);
+                        console.log('control', control);
+                    }
+                }
+            }
+
+            for (const type of ['leg', 'split']) {
+                athlete[type].relativeTimes = athlete.controls.map(control => control[type].relativeTime);
+                athlete[type].relativeTimesInSeconds = athlete.controls.map(control => control[type].relativeTimeInSeconds);
+                athlete[type].places = athlete.controls.map(control => control[type].place);
+
+                athlete[type].actualTimes = athlete.controls.map(control => control[type].actualTime);
+                athlete[type].actualTimesInSeconds = athlete.controls.map(control => control[type].actualTimeInSeconds);
+            }
+        }
+
+        console.log('[Step 2] Calculating additional time information from parsed data - DONE');
+    };
+
     const enhanceOrienteeringDataForCharts = orienteeringData => {
-        console.log('Enhancing data so it can be used together with charts...');
+        console.log('[Step 3] Enhancing data so it can be used together with charts...');
 
         const aggregated = orienteeringData.aggregated;
         const results = orienteeringData.results;
@@ -416,7 +506,9 @@ const orienteering = (() => {
                     const splitTimeInSeconds = control.split.relativeTimeInSeconds !== MISSING_TIME ? bestSplitTimeInSeconds + control.split.relativeTimeInSeconds : MISSING_TIME;
 
                     control.leg.actualTimeMinimized = formatTime(legTimeInSeconds, 'minutes');
+                    athlete.leg.actualTimesMinimized.push(control.leg.actualTimeMinimized);
                     control.split.actualTimeMinimized = formatTime(splitTimeInSeconds, 'minutes');
+                    athlete.split.actualTimesMinimized.push(control.split.actualTimeMinimized);
 
                     const relativeLegTimeMinimized =
                         control.leg.relativeTimeInSeconds > 0 ?
@@ -644,7 +736,7 @@ const orienteering = (() => {
             orienteeringData.best.optimalTotalTime = formatTime(optimalTotalTimeInSeconds, 'minutes');
         }
 
-        console.log('Enhancing data so it can be used together with charts - DONE');
+        console.log('[Step 3] Enhancing data so it can be used together with charts - DONE');
     };
 
     console.log(`Initializing orienteering functionality - DONE (version ${version})`);
@@ -652,6 +744,7 @@ const orienteering = (() => {
     return {
         version,
         parseSplitTimesExportedAsText,
+        calculateActualAndRelativeTimesFromParsedInformation,
         enhanceOrienteeringDataForCharts,
         formatTime: formatTime
     }
