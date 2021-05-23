@@ -202,8 +202,10 @@
             typeOfTimeDataToParse: 'ACTUAL'
         }
 
+        const result = {};
+
         for (const typeOfTimeDataToParse of ['RELATIVE', 'ACTUAL']) {
-            console.log('');
+            console.group('Importing test data of type ' + typeOfTimeDataToParse);
 
             configuration.typeOfTimeDataToParse = typeOfTimeDataToParse;
 
@@ -221,6 +223,37 @@
 
             orienteering.enhanceOrienteeringDataForCharts(orienteeringData);
             console.log('orienteeringData AFTER enhancing', orienteeringData);
+
+            result[typeOfTimeDataToParse] = orienteeringData;
+
+            console.log('Importing test data of type ' + typeOfTimeDataToParse + " - DONE");
+            console.groupEnd();
+        }
+
+        const replacer = (key, value) => {
+            if (!["results", "controls"/*, "times"*/].includes(key) && Array.isArray(value)) {
+                if (Array.isArray(value[0])) {
+                    return value;
+                }
+                return "[ " + value.join(", ") + " ]";
+            }
+            if ("results" === key) {
+                return value.slice(0, 1);
+            }
+            return value;
+        }
+
+        const setTextContent = (elementId, textContent) => document.getElementById(elementId).textContent = textContent;
+
+        const setJsonTextContent = (elementId, textContent) => document.getElementById(elementId).textContent = JSON.stringify(textContent, replacer, 2);
+
+        window.onload = () => {
+            console.group("Presenting results");
+            setTextContent("versionNumber", orienteering.version);
+            setJsonTextContent("exampleOfParsingActualTimes", result.ACTUAL);
+            setJsonTextContent("exampleOfParsingRelativeTimes", result.RELATIVE);
+            console.log("Presenting result -DONE");
+            console.groupEnd();
         }
 
 
@@ -231,9 +264,24 @@
 
 <body>
 
+<h1>Example of parsing orienteering data <small id="versionNumber" style="color: gray"></small></h1>
+
 <p>
     See the console logs.
 </p>
+
+<p>
+    Below you can see examples of what the parsed result is.
+</p>
+
+<h2>Example of parsing ACTUAL times</h2>
+
+<pre id="exampleOfParsingActualTimes"></pre>
+
+
+<h2>Example of parsing RELATIVE times</h2>
+
+<pre id="exampleOfParsingRelativeTimes"></pre>
 
 
 </body>

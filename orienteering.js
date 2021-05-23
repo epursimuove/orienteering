@@ -6,9 +6,9 @@
 
 const orienteering = (() => {
 
-    console.log('Initializing orienteering functionality...');
+    console.group('Initializing orienteering functionality...');
 
-    const version = '1.5.0';
+    const version = '1.5.1';
     const MISSING_TIME = -1;
     const NO_PLACE = -1;
 
@@ -59,7 +59,7 @@ const orienteering = (() => {
         if (mandatoryHours || rest >= 3600) {
             const hours = Math.floor(rest / 3600);
             rest -= hours * 3600;
-            result += doubleDigits || result.length > 0 ? `${zeroPad(hours)}:` : `${hours}:`;
+            result += doubleDigits /*|| result.length > 0*/ ? `${zeroPad(hours)}:` : `${hours}:`;
             // result += `${hours}:`;
         }
         if (mandatoryMinutes || rest >= 60 || result.length > 0) {
@@ -89,12 +89,12 @@ const orienteering = (() => {
         return {
             relativeTimes: [], // Original value read from WinSplits. TODO Inte alltid originalvärden, kan vara actual också.
             relativeTimesInSeconds: [],
-            relativeTimesMinimized: [], // Format: h:m:s.
+            relativeTimesMinimized: [], // Format: ±hh:mm:ss.
             places: [],
             timesPercentages: [],
             actualTimes: [],
             actualTimesInSeconds: [],
-            actualTimesMinimized: [] // Format: h:m:s.
+            actualTimesMinimized: [] // Format: hh:mm:ss.
         }
     };
 
@@ -107,31 +107,40 @@ const orienteering = (() => {
         };
     };
 
-    const createEmptyControls = numberOfControls => {
+    const createControlsArray = (numberOfControls, fnStart, fnControl, fnFinish) => {
         const controls = [];
 
-        // controls.push('Start');
+        if (fnStart) {
+            controls.push(fnStart());
+        }
 
         for (let control = 1; control <= numberOfControls; control++) {
-            controls.push(createEmptyControl(control));
+            controls.push(fnControl(control));
         }
-        controls.push(createEmptyControl()); // Finish.
+
+        if (fnFinish) {
+            controls.push(fnFinish());
+        }
 
         return controls;
+    }
+
+    const createEmptyControls = numberOfControls => {
+        return createControlsArray(
+            numberOfControls,
+            null,
+            controlNumber => createEmptyControl(controlNumber),
+            () => createEmptyControl()
+        );
     };
 
     const createControlLabels = numberOfControls => {
-        const controls = [];
-
-        controls.push('Start');
-
-        for (let control = 1; control <= numberOfControls; control++) {
-            controls.push(`Control ${control}`);
-        }
-
-        controls.push('Finish');
-        // controls[controls.length - 1] = 'Finish'; // Rename last control to 'Finish'.
-        return controls;
+        return createControlsArray(
+            numberOfControls,
+            () => "Start",
+            controlNumber => `Control ${controlNumber}`,
+            () => "Finish"
+        );
     };
 
     const getPlace = placeStr => placeStr === '' ? NO_PLACE : parseInt(placeStr.substring(1, placeStr.length - 1), 10); // '(12)' => 12.
@@ -206,7 +215,7 @@ const orienteering = (() => {
         // Now you can also import formats that consist of actual split times, so you don't need to export
         // with relative times.
 
-        console.log('[Step 1] Parsing WinSplits Online exported data...');
+        console.group('[Step 1] Parsing WinSplits Online exported data...');
 
         const typeOfData = configuration.typeOfTimeDataToParse + ' times';
         console.log(`Parsing ${typeOfData}`);
@@ -248,8 +257,11 @@ const orienteering = (() => {
                     legNoMistakes: [],
                     legMinorMistakes: [],
                     legMajorMistakes: [],
-                }
+                },
+                averagePercentageLoss: [],
+                medianPercentageLoss: [],
             },
+            results: []
         };
 
         const lines = rawData.split('\n');
@@ -269,7 +281,7 @@ const orienteering = (() => {
 
         let lineCount = 0;
 
-        for (let line of lines) {
+        for (const line of lines) {
             // console.log('line', line);
             const parts = line.split('\t');
             // console.log('parts.length', parts.length);
@@ -337,7 +349,7 @@ const orienteering = (() => {
                 const correctHeadTailSecondRow = !firstRowForAthlete && nameOrClub === athlete.club;
 
                 if (!(correctStructure && (correctHeadTailFirstRow || correctHeadTailSecondRow))) {
-                    console.log('MISMATCH!!!!');
+                    console.warn('MISMATCH!!!!');
                 }
             }
 
@@ -367,14 +379,16 @@ const orienteering = (() => {
 
 
         orienteeringData.results = athletes;
+        console.log(`Parsed data contains ${typeOfData} for ${orienteeringData.results.length} athletes and ${orienteeringData.numberOfControls} controls`);
         console.log('[Step 1] Parsing WinSplits Online exported data - DONE');
+        console.groupEnd();
 
         return orienteeringData;
     };
 
     const isMistake = (bestLegTimesInSeconds, percentage) => (relativeLegTimeInSeconds, index) => {
         const bestLegTimeInSeconds = bestLegTimesInSeconds[index];
-        const isMistake = relativeLegTimeInSeconds > (bestLegTimeInSeconds * percentage / 100);
+        const isMistake = relativeLegTimeInSeconds > bestLegTimeInSeconds * percentage / 100;
         return isMistake;
     };
 
@@ -402,7 +416,7 @@ const orienteering = (() => {
     const interestingAthlete = athlete => false && athlete.position > 0 && athlete.position <= 2;
 
     const calculateActualAndRelativeTimesFromParsedInformation = (orienteeringData, configuration) => {
-        console.log('[Step 2] Calculating additional time information from parsed data...');
+        console.group('[Step 2] Calculating additional time information from parsed data...');
 
         const parsingRelativeTimes = configuration.typeOfTimeDataToParse === 'RELATIVE';
         const typeOfData = configuration.typeOfTimeDataToParse + ' times';
@@ -451,10 +465,11 @@ const orienteering = (() => {
         }
 
         console.log('[Step 2] Calculating additional time information from parsed data - DONE');
+        console.groupEnd();
     };
 
     const enhanceOrienteeringDataForCharts = orienteeringData => {
-        console.log('[Step 3] Enhancing data so it can be used together with charts...');
+        console.group('[Step 3] Enhancing data so it can be used together with charts...');
 
         const aggregated = orienteeringData.aggregated;
         const results = orienteeringData.results;
@@ -493,44 +508,34 @@ const orienteering = (() => {
         }
 
         {
+
+            const calculateAdditionalInformation = (type, athlete, control, index) => {
+                const bestTimeInSeconds = orienteeringData.best[type].timesInSeconds[index];
+                const relativeTimeInSecondsSortedAscending = orienteeringData.secondBest[type].relativeTimesInSeconds[index][1];
+
+                const timeInSeconds = control[type].relativeTimeInSeconds !== MISSING_TIME ? bestTimeInSeconds + control[type].relativeTimeInSeconds : MISSING_TIME;
+
+                control[type].actualTimeMinimized = formatTime(timeInSeconds, 'minutes');
+                athlete[type].actualTimesMinimized.push(control[type].actualTimeMinimized);
+
+                const relativeTimeMinimized =
+                    control[type].relativeTimeInSeconds > 0 ?
+                        '+' + formatTime(control[type].relativeTimeInSeconds) :
+                        control[type].relativeTimeInSeconds === 0 ?
+                            relativeTimeInSecondsSortedAscending > 0 ?
+                                '-' + formatTime(relativeTimeInSecondsSortedAscending) :
+                                0 :
+                            null;
+                athlete[type].relativeTimesMinimized.push(relativeTimeMinimized);
+                control[type].relativeTimeMinimized = relativeTimeMinimized;
+            };
+
             // Calculate additional information.
             results.forEach(athlete => {
                 athlete.controls.forEach((control, index) => {
 
-                    const bestLegTimeInSeconds = orienteeringData.best.leg.timesInSeconds[index];
-                    const bestSplitTimeInSeconds = orienteeringData.best.split.timesInSeconds[index];
-                    const relativeLegTimeInSecondsSortedAscending = orienteeringData.secondBest.leg.relativeTimesInSeconds[index][1];
-                    const relativeSplitTimeInSecondsSortedAscending = orienteeringData.secondBest.split.relativeTimesInSeconds[index][1];
-
-                    const legTimeInSeconds = control.leg.relativeTimeInSeconds !== MISSING_TIME ? bestLegTimeInSeconds + control.leg.relativeTimeInSeconds : MISSING_TIME;
-                    const splitTimeInSeconds = control.split.relativeTimeInSeconds !== MISSING_TIME ? bestSplitTimeInSeconds + control.split.relativeTimeInSeconds : MISSING_TIME;
-
-                    control.leg.actualTimeMinimized = formatTime(legTimeInSeconds, 'minutes');
-                    athlete.leg.actualTimesMinimized.push(control.leg.actualTimeMinimized);
-                    control.split.actualTimeMinimized = formatTime(splitTimeInSeconds, 'minutes');
-                    athlete.split.actualTimesMinimized.push(control.split.actualTimeMinimized);
-
-                    const relativeLegTimeMinimized =
-                        control.leg.relativeTimeInSeconds > 0 ?
-                            '+' + formatTime(control.leg.relativeTimeInSeconds) :
-                            control.leg.relativeTimeInSeconds === 0 ?
-                                relativeLegTimeInSecondsSortedAscending > 0 ?
-                                    '-' + formatTime(relativeLegTimeInSecondsSortedAscending) :
-                                    0 :
-                                null;
-                    athlete.leg.relativeTimesMinimized.push(relativeLegTimeMinimized);
-                    control.leg.relativeTimeMinimized = relativeLegTimeMinimized;
-
-                    const relativeSplitTimeMinimized =
-                        control.split.relativeTimeInSeconds > 0 ?
-                            '+' + formatTime(control.split.relativeTimeInSeconds) :
-                            control.split.relativeTimeInSeconds === 0 ?
-                                relativeSplitTimeInSecondsSortedAscending > 0 ?
-                                    '-' + formatTime(relativeSplitTimeInSecondsSortedAscending) :
-                                    0 :
-                                null;
-                    athlete.split.relativeTimesMinimized.push(relativeSplitTimeMinimized);
-                    control.split.relativeTimeMinimized = relativeSplitTimeMinimized;
+                    calculateAdditionalInformation("leg", athlete, control, index);
+                    calculateAdditionalInformation("split", athlete, control, index);
                 });
 
                 // // Add 'Start' times for every athlete. NOT NEEDED!!!!
@@ -545,30 +550,32 @@ const orienteering = (() => {
         const isMinorMistake = isMistake(orienteeringData.best.leg.timesInSeconds, 15);
         const isMajorMistake = isMistake(orienteeringData.best.leg.timesInSeconds, 30);
 
+        const calculateNumberOfPlacesInInterval = (minLegPlace, maxLegPlace, athlete) => {
+            return athlete.leg.places
+                .filter(legPlace => legPlace >= minLegPlace && legPlace <= maxLegPlace)
+                .length;
+        };
+
+        const calculateNumberOfTimesWithinPercentages = (minPercentageIncluded, maxPercentageExcluded, athlete) => {
+            return athlete.leg.relativeTimesInSeconds
+                .filter((relativeLegTime, index) => isWithinPercentage(orienteeringData.best.leg.timesInSeconds, minPercentageIncluded, maxPercentageExcluded)(relativeLegTime, index))
+                .length;
+        };
+
         // Enhancing results for each athlete.
         results.forEach(athlete => {
 
             athlete.additionals = {};
 
-            athlete.additionals.legFirstPlace = athlete.leg.places
-                .filter(legPlace => legPlace === 1)
-                .length;
+            athlete.additionals.legFirstPlace = calculateNumberOfPlacesInInterval(1, 1, athlete);
 
-            athlete.additionals.legSecondPlace = athlete.leg.places
-                .filter(legPlace => legPlace === 2)
-                .length;
+            athlete.additionals.legSecondPlace = calculateNumberOfPlacesInInterval(2, 2, athlete);
 
-            athlete.additionals.legThirdPlace = athlete.leg.places
-                .filter(legPlace => legPlace === 3)
-                .length;
+            athlete.additionals.legThirdPlace = calculateNumberOfPlacesInInterval(3, 3, athlete);
 
-            athlete.additionals.leg4_6Place = athlete.leg.places
-                .filter(legPlace => legPlace >= 4 && legPlace <= 6)
-                .length;
+            athlete.additionals.leg4_6Place = calculateNumberOfPlacesInInterval(4, 6, athlete);
 
-            athlete.additionals.leg7_12Place = athlete.leg.places
-                .filter(legPlace => legPlace >= 7 && legPlace <= 12)
-                .length;
+            athlete.additionals.leg7_12Place = calculateNumberOfPlacesInInterval(7, 12, athlete);
 
             athlete.additionals.legNoMistake = athlete.leg.relativeTimesInSeconds
                 .filter((relativeLegTime, index) => !isMinorMistake(relativeLegTime, index) && !isMajorMistake(relativeLegTime, index))
@@ -583,37 +590,21 @@ const orienteering = (() => {
                 .length;
 
             {
-                athlete.additionals.legWithin1Percent = athlete.leg.relativeTimesInSeconds
-                    .filter((relativeLegTime, index) => isWithinPercentage(orienteeringData.best.leg.timesInSeconds, 0, 1)(relativeLegTime, index))
-                    .length;
+                athlete.additionals.legWithin1Percent = calculateNumberOfTimesWithinPercentages(0, 1, athlete);
 
-                athlete.additionals.legWithin2Percent = athlete.leg.relativeTimesInSeconds
-                    .filter((relativeLegTime, index) => isWithinPercentage(orienteeringData.best.leg.timesInSeconds, 1, 2)(relativeLegTime, index))
-                    .length;
+                athlete.additionals.legWithin2Percent = calculateNumberOfTimesWithinPercentages(1, 2, athlete);
 
-                athlete.additionals.legWithin4Percent = athlete.leg.relativeTimesInSeconds
-                    .filter((relativeLegTime, index) => isWithinPercentage(orienteeringData.best.leg.timesInSeconds, 2, 4)(relativeLegTime, index))
-                    .length;
+                athlete.additionals.legWithin4Percent = calculateNumberOfTimesWithinPercentages(2, 4, athlete);
 
-                athlete.additionals.legWithin8Percent = athlete.leg.relativeTimesInSeconds
-                    .filter((relativeLegTime, index) => isWithinPercentage(orienteeringData.best.leg.timesInSeconds, 4, 8)(relativeLegTime, index))
-                    .length;
+                athlete.additionals.legWithin8Percent = calculateNumberOfTimesWithinPercentages(4, 8, athlete);
 
-                athlete.additionals.legWithin16Percent = athlete.leg.relativeTimesInSeconds
-                    .filter((relativeLegTime, index) => isWithinPercentage(orienteeringData.best.leg.timesInSeconds, 8, 16)(relativeLegTime, index))
-                    .length;
+                athlete.additionals.legWithin16Percent = calculateNumberOfTimesWithinPercentages(8, 16, athlete);
 
-                athlete.additionals.legWithin32Percent = athlete.leg.relativeTimesInSeconds
-                    .filter((relativeLegTime, index) => isWithinPercentage(orienteeringData.best.leg.timesInSeconds, 16, 32)(relativeLegTime, index))
-                    .length;
+                athlete.additionals.legWithin32Percent = calculateNumberOfTimesWithinPercentages(16, 32, athlete);
 
-                athlete.additionals.legWithin64Percent = athlete.leg.relativeTimesInSeconds
-                    .filter((relativeLegTime, index) => isWithinPercentage(orienteeringData.best.leg.timesInSeconds, 32, 64)(relativeLegTime, index))
-                    .length;
+                athlete.additionals.legWithin64Percent = calculateNumberOfTimesWithinPercentages(32, 64, athlete);
 
-                athlete.additionals.legWithin128Percent = athlete.leg.relativeTimesInSeconds
-                    .filter((relativeLegTime, index) => isWithinPercentage(orienteeringData.best.leg.timesInSeconds, 64, 128)(relativeLegTime, index))
-                    .length;
+                athlete.additionals.legWithin128Percent = calculateNumberOfTimesWithinPercentages(64, 128, athlete);
 
                 athlete.additionals.legAbove128Percent = athlete.leg.relativeTimesInSeconds
                     .filter((relativeLegTime, index) => isAbovePercentage(orienteeringData.best.leg.timesInSeconds, 128)(relativeLegTime, index))
@@ -636,7 +627,7 @@ const orienteering = (() => {
 
                         return {
                             t: splitTimeStringForAthlete,
-                            y: index < orienteeringData.numberOfControls ? 'Control ' + (index + 1) : 'Finish'
+                            y: index < orienteeringData.numberOfControls ? `Control ${index + 1}` : 'Finish'
                             // y: (index + 1)
                         }
                     });
@@ -737,16 +728,18 @@ const orienteering = (() => {
         }
 
         console.log('[Step 3] Enhancing data so it can be used together with charts - DONE');
+        console.groupEnd();
     };
 
     console.log(`Initializing orienteering functionality - DONE (version ${version})`);
+    console.groupEnd();
 
     return {
         version,
         parseSplitTimesExportedAsText,
         calculateActualAndRelativeTimesFromParsedInformation,
         enhanceOrienteeringDataForCharts,
-        formatTime: formatTime
+        formatTime
     }
 
 })();
